@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -15,7 +16,8 @@ class Program
 
   static void GetDotNetFrameworkVersions()
   {
-    string[] versionKeys = new string[] { "v4\\Full", "v4\\Client", "v3.5", "v3.0", "v2.0.50727" };
+    List<string> versionKeys = new List<string> { "v4\\Full", "v4\\Client", "v3.5", "v3.0", "v2.0.50727" };
+    versionKeys.Sort();
     string registryPath = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\";
 
     Console.WriteLine("Installed .NET Framework versions:");
@@ -41,13 +43,10 @@ class Program
 
   static void GetDotNetCoreAndNewerVersions()
   {
-    Console.WriteLine("\nLatest .NET Core/.NET 5+ versions:");
+    Console.WriteLine("\n.NET Core/.NET 5+ versions:");
 
     try
     {
-      Dictionary<int, Version> latestSdks = new Dictionary<int, Version>();
-      Dictionary<int, Version> latestRuntimes = new Dictionary<int, Version>();
-
       ProcessStartInfo startInfo = new ProcessStartInfo
       {
         FileName = "dotnet",
@@ -65,17 +64,32 @@ class Program
         string output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
 
-        Regex regex = new Regex(@"(\d+\.\d+\.\d+)", RegexOptions.Compiled);
+        Regex regex = new Regex(@"(\d+\.\d+\.\d+) \[(.+)\]", RegexOptions.Compiled);
 
+        Console.WriteLine("SDKs:");
         foreach (Match match in regex.Matches(output))
         {
-          Version currentVersion = new Version(match.Value);
-          int majorVersion = currentVersion.Major;
+          string version = match.Groups[1].Value;
+          string path = match.Groups[2].Value;
 
-          if (!latestSdks.ContainsKey(majorVersion) || currentVersion > latestSdks[majorVersion])
+          Console.WriteLine($"Version: {version}");
+          Console.WriteLine($"Path: {path}");
+
+          // Display target frameworks
+          string targetFrameworksPath = Path.Combine(path, "Microsoft.NET.Sdk", "supportedTargetFrameworks");
+          if (Directory.Exists(targetFrameworksPath))
           {
-            latestSdks[majorVersion] = currentVersion;
+            string[] targetFrameworks = Directory.GetFiles(targetFrameworksPath, "*.txt");
+            Console.Write("Target Frameworks: ");
+            foreach (string targetFrameworkFile in targetFrameworks)
+            {
+              string targetFramework = Path.GetFileNameWithoutExtension(targetFrameworkFile);
+              Console.Write($"{targetFramework} ");
+            }
+            Console.WriteLine();
           }
+
+          Console.WriteLine();
         }
       }
 
@@ -88,28 +102,18 @@ class Program
         string output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
 
-        Regex regex = new Regex(@"Microsoft\.NETCore\.App (\d+\.\d+\.\d+)", RegexOptions.Compiled);
+        Regex regex = new Regex(@"Microsoft\.(NETCore|NET)\.App (\d+\.\d+\.\d+) \[(.+)\]", RegexOptions.Compiled);
 
+        Console.WriteLine("Runtimes:");
         foreach (Match match in regex.Matches(output))
         {
-          Version currentVersion = new Version(match.Groups[1].Value);
-          int majorVersion = currentVersion.Major;
+          string version = match.Groups[2].Value;
+          string path = match.Groups[3].Value;
 
-          if (!latestRuntimes.ContainsKey(majorVersion) || currentVersion > latestRuntimes[majorVersion])
-          {
-            latestRuntimes[majorVersion] = currentVersion;
-          }
+          Console.WriteLine($"Version: {version}");
+          Console.WriteLine($"Path: {path}");
+          Console.WriteLine();
         }
-      }
-
-      foreach (var sdk in latestSdks)
-      {
-        Console.WriteLine($"SDK - Version: {sdk.Value}");
-      }
-
-      foreach (var runtime in latestRuntimes)
-      {
-        Console.WriteLine($"Runtime - Version: {runtime.Value}");
       }
     }
     catch (Exception ex)
