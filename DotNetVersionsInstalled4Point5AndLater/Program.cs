@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -40,10 +41,13 @@ class Program
 
   static void GetDotNetCoreAndNewerVersions()
   {
-    Console.WriteLine("\nInstalled .NET Core/.NET 5+ versions:");
+    Console.WriteLine("\nLatest .NET Core/.NET 5+ versions:");
 
     try
     {
+      Dictionary<int, Version> latestSdks = new Dictionary<int, Version>();
+      Dictionary<int, Version> latestRuntimes = new Dictionary<int, Version>();
+
       ProcessStartInfo startInfo = new ProcessStartInfo
       {
         FileName = "dotnet",
@@ -65,7 +69,13 @@ class Program
 
         foreach (Match match in regex.Matches(output))
         {
-          Console.WriteLine($"SDK - Version: {match.Value}");
+          Version currentVersion = new Version(match.Value);
+          int majorVersion = currentVersion.Major;
+
+          if (!latestSdks.ContainsKey(majorVersion) || currentVersion > latestSdks[majorVersion])
+          {
+            latestSdks[majorVersion] = currentVersion;
+          }
         }
       }
 
@@ -82,8 +92,24 @@ class Program
 
         foreach (Match match in regex.Matches(output))
         {
-          Console.WriteLine($"Runtime - Version: {match.Groups[1].Value}");
+          Version currentVersion = new Version(match.Groups[1].Value);
+          int majorVersion = currentVersion.Major;
+
+          if (!latestRuntimes.ContainsKey(majorVersion) || currentVersion > latestRuntimes[majorVersion])
+          {
+            latestRuntimes[majorVersion] = currentVersion;
+          }
         }
+      }
+
+      foreach (var sdk in latestSdks)
+      {
+        Console.WriteLine($"SDK - Version: {sdk.Value}");
+      }
+
+      foreach (var runtime in latestRuntimes)
+      {
+        Console.WriteLine($"Runtime - Version: {runtime.Value}");
       }
     }
     catch (Exception ex)
