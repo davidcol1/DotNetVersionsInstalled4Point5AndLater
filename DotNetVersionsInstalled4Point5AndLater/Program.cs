@@ -1,58 +1,94 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
-public class GetDotNetVersion
+class Program
 {
-    public static void Main()
+  static void Main()
+  {
+    GetDotNetFrameworkVersions();
+    GetDotNetCoreAndNewerVersions();
+    Console.ReadLine();
+  }
+
+  static void GetDotNetFrameworkVersions()
+  {
+    string[] versionKeys = new string[] { "v4\\Full", "v4\\Client", "v3.5", "v3.0", "v2.0.50727" };
+    string registryPath = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\";
+
+    Console.WriteLine("Installed .NET Framework versions:");
+
+    foreach (string versionKey in versionKeys)
     {
-        GetDotNetVersion.Get45PlusFromRegistry();
-    }
+      using (RegistryKey ndpKey = Registry.LocalMachine.OpenSubKey(registryPath + versionKey))
+      {
+        if (ndpKey != null)
+        {
+          object version = ndpKey.GetValue("Version");
+          object sp = ndpKey.GetValue("SP");
+          object install = ndpKey.GetValue("Install");
 
-    private static void Get45PlusFromRegistry()
+          if (version != null && Convert.ToInt32(install) == 1)
+          {
+            Console.WriteLine($"{versionKey} - Version: {version} - Service Pack: {sp ?? 0}");
+          }
+        }
+      }
+    }
+  }
+
+  static void GetDotNetCoreAndNewerVersions()
+  {
+    Console.WriteLine("\nInstalled .NET Core/.NET 5+ versions:");
+
+    try
     {
-        const string subkey = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\";
+      ProcessStartInfo startInfo = new ProcessStartInfo
+      {
+        FileName = "dotnet",
+        Arguments = "--list-sdks",
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+      };
 
-        using (var ndpKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32).OpenSubKey(subkey))
-        {
-            if (ndpKey != null && ndpKey.GetValue("Release") != null)
-            {
-                Console.WriteLine(".NET Framework Version: " + CheckFor45PlusVersion((int)ndpKey.GetValue("Release")));
-            }
-            else
-            {
-                Console.WriteLine(".NET Framework Version 4.5 or later is not detected.");
-            }
-        }
+      using (Process process = new Process { StartInfo = startInfo })
+      {
+        process.Start();
 
-        // Checking the version using >= enables forward compatibility.
-        string CheckFor45PlusVersion(int releaseKey)
+        string output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+
+        Regex regex = new Regex(@"(\d+\.\d+\.\d+)", RegexOptions.Compiled);
+
+        foreach (Match match in regex.Matches(output))
         {
-            if (releaseKey >= 528040)
-              return "4.8 or later";
-            if (releaseKey >= 461808)
-              return "4.7.2";
-            if (releaseKey >= 461308)
-                return "4.7.1";
-            if (releaseKey >= 460798)
-                return "4.7";
-            if (releaseKey >= 394802)
-                return "4.6.2";
-            if (releaseKey >= 394254)
-                return "4.6.1";
-            if (releaseKey >= 393295)
-                return "4.6";
-            if (releaseKey >= 379893)
-                return "4.5.2";
-            if (releaseKey >= 378675)
-                return "4.5.1";
-            if (releaseKey >= 378389)
-                return "4.5";
-            // This code should never execute. A non-null release key should mean
-            // that 4.5 or later is installed.
-            return "No 4.5 or later version detected";
+          Console.WriteLine($"SDK - Version: {match.Value}");
         }
-        Console.ReadLine();
+      }
+
+      startInfo.Arguments = "--list-runtimes";
+
+      using (Process process = new Process { StartInfo = startInfo })
+      {
+        process.Start();
+
+        string output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+
+        Regex regex = new Regex(@"Microsoft\.NETCore\.App (\d+\.\d+\.\d+)", RegexOptions.Compiled);
+
+        foreach (Match match in regex.Matches(output))
+        {
+          Console.WriteLine($"Runtime - Version: {match.Groups[1].Value}");
+        }
+      }
     }
+    catch (Exception ex)
+    {
+      Console.WriteLine("Error detecting .NET Core/.NET 5+ installations: " + ex.Message);
+    }
+  }
 }
-// This example displays output like the following:
-//       .NET Framework Version: 4.6.1
